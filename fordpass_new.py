@@ -91,7 +91,7 @@ class Vehicle(object):
                 self.token = result["access_token"]
                 self.refresh_token = result["refresh_token"]
                 self.expiresAt = time.time() + result["expires_in"]
-                if self.saveToken:
+                if self.saveToken == False:
                     result["expiry_date"] = time.time() + result["expires_in"]
                     self.writeToken(result)
                 return True
@@ -101,6 +101,7 @@ class Vehicle(object):
     def refreshToken(self, token):
         # Token is invalid so let's try refreshing it
         data = {"refresh_token": token["refresh_token"]}
+        print(data)
         headers = {**apiHeaders}
 
         r = requests.put(
@@ -115,7 +116,7 @@ class Vehicle(object):
         logging.debug(r.text)
         if r.status_code == 200:
             result = r.json()
-            if self.saveToken:
+            if self.saveToken == 1:
                 result["expiry_date"] = time.time() + result["expires_in"]
                 self.writeToken(result)
             self.token = result["access_token"]
@@ -125,11 +126,14 @@ class Vehicle(object):
     def __acquireToken(self):
         # Fetch and refresh token as needed
         # If file exists read in token file and check it's valid
-        if self.saveToken:
+        if self.saveToken == 1:
+            print("TEST")
             if os.path.isfile("/tmp/token.txt"):
                 data = self.readToken()
             else:
                 data = dict()
+                print(self.refresh_token)
+                print(self.expiresAt)
                 data["access_token"] = self.token
                 data["refresh_token"] = self.refresh_token
                 data["expiry_date"] = self.expiresAt
@@ -150,6 +154,11 @@ class Vehicle(object):
         if self.token == None:
             # No existing token exists so refreshing library
             self.auth()
+            data = dict()
+            data["access_token"] = self.token
+            data["refresh_token"] = self.refresh_token
+            data["expiry_date"] = self.expiresAt
+            self.refreshToken(data)
         else:
             logging.info("Token is valid, continuing")
             pass
