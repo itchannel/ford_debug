@@ -8,7 +8,7 @@ import requests
 defaultHeaders = {
     "Accept": "*/*",
     "Accept-Language": "en-us",
-    "User-Agent": "fordpass-ap/93 CFNetwork/1197 Darwin/20.0.0",
+    "User-Agent": "fordpass-na/449 CFNetwork/1206 Darwin/20.1.0",
     "Accept-Encoding": "gzip, deflate, br",
 }
 
@@ -19,6 +19,8 @@ apiHeaders = {
 }
 
 baseUrl = "https://usapi.cv.ford.com/api"
+
+guardUrl = "https://api.mps.ford.com/api"
 
 
 class Vehicle(object):
@@ -174,6 +176,24 @@ class Vehicle(object):
         with open("/tmp/token.txt") as token_file:
             return json.load(token_file)
 
+    def guard(self):
+        self.__acquireToken()
+
+        params = {"lrdt": "01-01-1970 00:00:00"}
+
+        headers = {**apiHeaders, "auth-token": self.token}
+
+        r = requests.get(
+            f"{guardUrl}/guardmode/v1/{self.vin}/session", params=params, headers=headers
+        )
+        logging.debug("Guard Status")
+        print(r.request.body)
+        logging.debug(r.request.headers)
+        logging.debug(r.request.body)
+        logging.debug(r.status_code)
+        logging.debug(r.text)
+
+
     def status(self):
         # Get the status of the vehicle
 
@@ -231,6 +251,36 @@ class Vehicle(object):
             "DELETE", f"{baseUrl}/vehicles/v2/{self.vin}/doors/lock"
         )
 
+
+    def enableGuard(self):
+        """
+        Issue an unlock command to the doors
+        """
+        self.__acquireToken()
+
+        r = self.__makeRequest(
+            "PUT", f"{guardUrl}/guardmode/v1/{self.vin}/session", None, None
+        )
+        logging.debug(r.request.headers)
+        logging.debug(r.request.body)
+        logging.debug(r.status_code)
+        logging.debug(r.text)
+        return r
+
+    def disableGuard(self):
+        """
+        Issue an unlock command to the doors
+        """
+        self.__acquireToken()
+        r = self.__makeRequest(
+            "DELETE", f"{guardUrl}/guardmode/v1/{self.vin}/session", None, None
+        )
+        logging.debug(r.request.headers)
+        logging.debug(r.request.body)
+        logging.debug(r.status_code)
+        logging.debug(r.text)
+        return r
+
     def requestUpdate(self):
         # Send request to refresh data from the cars module
         self.__acquireToken()
@@ -250,12 +300,16 @@ class Vehicle(object):
             url, headers=headers, data=data, params=params
         )
 
+    
+
     def __pollStatus(self, url, id):
         """
         Poll the given URL with the given command ID until the command is completed
         """
         status = self.__makeRequest("GET", f"{url}/{id}", None, None)
         result = status.json()
+        logging.debug(status.request.body)
+        logging.debug(status.status_code)
         if result["status"] == 552:
             logging.info("Command is pending")
             time.sleep(5)
