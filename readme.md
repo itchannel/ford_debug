@@ -19,7 +19,10 @@ It needs your
 - email
 - password
 - Car vin
-- 1 (boolean to cache token to /tmp/token.txt)
+- Region (UK&Europe, Australia, "North America & Canada")
+
+Example
+python3 debug.py test@test.com Password1 1FA23232323****** Australia
 
 
 ### Output
