@@ -19,10 +19,10 @@ It needs your
 - email
 - password
 - Car vin
-- 1 (boolean to cache token to /tmp/token.txt)
+- Region (UK&Europe, Australia, "North America & Canada")
 
-### Added Guard Mode testing (Guard Branch Only!!)
-Uncomment the guard mode functions in debug.py and run the file normally. Only for testing if directed
+Example
+python3 debug.py test@test.com Password1 1FA23232323****** Australia
 
 
 ### Output

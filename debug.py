@@ -14,8 +14,9 @@ if __name__ == "__main__":
     else:
         r = Vehicle(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]) # Username, Password, VIN
         #r.requestUpdate() # Poll the car for an update
-        #print(r.status())
-        print(r.guard()) # Print the status of guard mode
+        print(r.vehicles())
+        print(r.status())
+        #print(r.guard()) # Print the status of guard mode
 
 
         # Uncomment the following functions to test enabling/disabling
