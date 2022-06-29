@@ -1,11 +1,15 @@
 import json
 import logging
+import hashlib
 import os
 import time
+import string
+import random
 
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+from base64 import urlsafe_b64encode, urlsafe_b64decode
 
 _LOGGER = logging.getLogger(__name__)
 defaultHeaders = {
@@ -58,6 +62,173 @@ class Vehicle(object):
             _LOGGER.debug(configLocation)
             self.token_location = configLocation
 
+    def base64UrlEncode(self,data):
+        return urlsafe_b64encode(data).rstrip(b'=')
+
+    def auth2(self):
+        """New Authentication System """
+        # Auth Step1
+        headers = {
+            **defaultHeaders,
+            'Content-Type': 'application/json',
+        }
+        code1 = ''.join(random.choice(string.ascii_lowercase) for i in range(43))
+        m = hashlib.sha256()
+        m.update(code1.encode('utf-8'))
+        code_verifier = self.base64UrlEncode(m.digest()).decode('utf-8')
+        print(code_verifier)
+        #exit()
+        url1 = "https://sso.ci.ford.com/v1.0/endpoint/default/authorize?redirect_uri=https%3A%2F%2Fwww.ford.com%2Fsupport%2Fvehicle-dashboard&client_id=2b4c214c-1376-4eb2-9e62-533047cc34bf&response_type=code&state=&scope=openid&login_hint=%7B%22realm%22%20%3A%20%22cloudIdentityRealm%22%7D&code_challenge=" + code_verifier + "&code_challenge_method=S256"
+        print(url1)
+        r = session.get(
+            url1,
+            headers=headers,
+            allow_redirects=False
+        )
+        print(r.text)
+        print(r.status_code)
+        if r.status_code == 302:
+            nextUrl = r.headers["Location"]
+        else:
+            r.raise_for_status()
+        
+        # Auth Step2
+        r = session.get(
+            nextUrl,
+            headers=headers,
+            allow_redirects=False
+        )
+
+        print(r.text)
+        print(r.status_code)
+        print(r.headers)
+
+        if r.status_code == 302:
+            nextUrl = r.headers["Location"]
+        else:
+            r.raise_for_status()
+
+        # Auth Step3
+
+        headers = {
+            **defaultHeaders,
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        data = {
+            "operation": "verify",
+            "login-form-type": "password",
+            "username" : self.username,
+            "password" : self.password
+
+        }
+        r = session.post(
+            nextUrl,
+            headers=headers,
+            data = data,
+            allow_redirects=False
+
+        )
+
+        print(r.text)
+        print(r.status_code)
+        print(r.headers)
+
+        if r.status_code == 302:
+            nextUrl = r.headers["Location"]
+        else:
+            r.raise_for_status()
+
+        # Auth Step4 
+
+        headers = {
+            **defaultHeaders,
+            'Content-Type': 'application/json',
+        }
+
+        r = session.get(
+            nextUrl,
+            headers = headers,
+            allow_redirects=False
+        )
+
+        print(r.text)
+        print(r.status_code)
+        print(r.headers)
+
+        if r.status_code == 302:
+            nextUrl = r.headers["Location"]
+            query = requests.utils.urlparse(nextUrl).query
+            params = dict(x.split('=') for x in query.split('&'))
+            print(params)
+            code = params["code"]
+            print(code)
+        else:
+            r.raise_for_status()
+
+
+        # Auth Step5
+        headers = {
+            **defaultHeaders,
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        data = {
+            "client_id": "2b4c214c-1376-4eb2-9e62-533047cc34bf",
+            "grant_type": "authorization_code",
+            "scope": "openid",
+            "redirect_uri": "https://www.ford.com/support/vehicle-dashboard",
+            "resource": "",
+            "code": code,
+            "code_verifier": code1
+            }
+
+        r = session.post(
+            "https://sso.ci.ford.com/oidc/endpoint/default/token",
+             headers = headers,
+             data = data
+
+        )
+
+        print(r.text)
+        print(r.status_code)
+        print(r.headers)
+
+
+        if r.status_code == 200:
+            result = r.json()
+            if result["access_token"]:
+                access_token = result["access_token"]
+
+
+        # Step 6 Auth
+        data = {"ciToken": access_token}
+        headers = {**apiHeaders, "Application-Id": self.region}
+        r = session.post(
+            "https://api.mps.ford.com/api/token/v2/cat-with-ci-access-token",
+            data=json.dumps(data),
+            headers=headers,
+        )
+
+        print(r.text)
+        print(r.status_code)
+        print(r.headers)
+
+        if r.status_code == 200:
+            result = r.json()
+
+            self.token = result["access_token"]
+            self.refresh_token = result["refresh_token"]
+            self.expiresAt = time.time() + result["expires_in"]
+            if self.saveToken:
+                result["expiry_date"] = time.time() + result["expires_in"]
+                self.writeToken(result)
+
+            return True
+
+
+
+
+        #exit()
     def auth(self):
         """Authenticate and store the token"""
 
@@ -78,26 +249,34 @@ class Vehicle(object):
             data=data,
             headers=headers,
         )
-
+        print("1st Stage")
+        print(r.text)
+        print(r.status_code)
         if r.status_code == 200:
             _LOGGER.debug("Succesfully fetched token Stage1")
             result = r.json()
-            data = {"code": result["access_token"]}
+            data = {"ciToken": result["access_token"]}
             headers = {**apiHeaders, "Application-Id": self.region}
             # Fetch OAUTH token stage 2 and refresh token
-            r = session.put(
-                "https://api.mps.ford.com/api/oauth2/v1/token",
+           
+            r = session.post(
+                "https://api.mps.ford.com/api/token/v2/cat-with-ci-access-token",
                 data=json.dumps(data),
                 headers=headers,
             )
+            print("Second Stage")
+            print(r.text)
+            print(r.status_code)
             if r.status_code == 200:
                 result = r.json()
+
                 self.token = result["access_token"]
                 self.refresh_token = result["refresh_token"]
                 self.expiresAt = time.time() + result["expires_in"]
                 if self.saveToken:
                     result["expiry_date"] = time.time() + result["expires_in"]
                     self.writeToken(result)
+
                 return True
         else:
             r.raise_for_status()
@@ -107,8 +286,8 @@ class Vehicle(object):
         data = {"refresh_token": token["refresh_token"]}
         headers = {**apiHeaders, "Application-Id": self.region}
 
-        r = session.put(
-            "https://api.mps.ford.com/api/oauth2/v1/refresh",
+        r = session.post(
+            "https://api.mps.ford.com/api/token/v2/cat-with-refresh-token",
             data=json.dumps(data),
             headers=headers,
         )
@@ -149,7 +328,7 @@ class Vehicle(object):
                 # self.auth()
         if self.token == None:
             # No existing token exists so refreshing library
-            self.auth()
+            self.auth2()
         else:
             _LOGGER.debug("Token is valid, continuing")
             pass
@@ -196,7 +375,7 @@ class Vehicle(object):
         }
 
         r = session.get(
-            f"{baseUrl}/vehicles/v4/{self.vin}/status", params=params, headers=headers
+            f"{baseUrl}/vehicles/v5/{self.vin}/status", params=params, headers=headers
         )
         if r.status_code == 200:
             result = r.json()
@@ -221,6 +400,7 @@ class Vehicle(object):
                 params=params,
                 headers=headers,
             )
+            print(r.text)
             if r.status_code == 200:
                 result = r.json()
             return result["vehiclestatus"]
